@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>博客管理</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <header class="bg-gradient-to-r from-brand-600 to-purple-600 text-white">
+    <div class="max-w-5xl mx-auto px-4 py-6 flex items-center justify-between">
+      <a href="/" class="text-2xl font-semibold tracking-wide">我的博客</a>
+      <nav class="space-x-4">
+        <a href="/" class="hover:underline">首页</a>
+        <a href="/admin.html" class="hover:underline">管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8">
+    <section class="mb-8">
+      <h2 class="text-xl font-semibold mb-3">发布 / 编辑文章</h2>
+      <form id="postForm" class="bg-white rounded-xl shadow border border-gray-100 p-5">
+        <input type="hidden" id="postId" />
+        <div class="mb-4">
+          <label class="block text-sm text-gray-600 mb-2">标题</label>
+          <input id="title" class="w-full border rounded-md p-3 focus:ring focus:ring-brand-300" placeholder="请输入标题" />
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm text-gray-600 mb-2">内容</label>
+          <textarea id="content" class="w-full border rounded-md p-3 focus:ring focus:ring-brand-300" rows="8" placeholder="写点什么吧..."></textarea>
+        </div>
+        <div class="flex items-center gap-3">
+          <button type="submit" class="px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700 transition">保存</button>
+          <button type="button" id="resetBtn" class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 transition">重置</button>
+          <span id="status" class="text-sm text-gray-500"></span>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-semibold mb-3">文章列表</h2>
+      <div id="postList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+  </main>
+
+  <script>
+    let authed = false;
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        authed = !!data.authenticated;
+      } catch {
+        authed = false;
+      }
+      document.getElementById('postForm').classList.toggle('hidden', !authed);
+      attachAuthActions();
+    }
+
+    function attachAuthActions() {
+      const headerNav = document.querySelector('header nav');
+      let cp = document.getElementById('cpBtn');
+      let lo = document.getElementById('logoutBtn');
+      let li = document.getElementById('loginBtn');
+      if (authed) {
+        if (!cp) {
+          cp = document.createElement('button');
+          cp.id = 'cpBtn';
+          cp.className = 'px-3 py-1 rounded-md bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:opacity-90';
+          cp.textContent = '修改密码';
+          cp.onclick = () => showChangePasswordModal();
+          headerNav.appendChild(cp);
+        }
+        if (!lo) {
+          lo = document.createElement('button');
+          lo.id = 'logoutBtn';
+          lo.className = 'px-3 py-1 rounded-md bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:opacity-90';
+          lo.textContent = '退出登录';
+          lo.onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); authed = false; showLoginModal(); checkAuth(); loadPosts(); };
+          headerNav.appendChild(lo);
+        }
+        if (li) li.remove();
+      } else {
+        if (cp) cp.remove();
+        if (lo) lo.remove();
+        if (!li) {
+          li = document.createElement('button');
+          li.id = 'loginBtn';
+          li.className = 'px-3 py-1 rounded-md bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:opacity-90';
+          li.textContent = '管理员登录';
+          li.onclick = () => showLoginModal();
+          headerNav.appendChild(li);
+        }
+      }
+    }
+
+    function showLoginModal() {
+      if (document.getElementById('loginModal')) return;
+      const m = document.createElement('div');
+      m.id = 'loginModal';
+      m.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-50';
+      m.innerHTML = `
+        <div class="bg-white rounded-xl shadow p-6 w-full max-w-sm">
+          <h3 class="text-lg font-semibold mb-4">管理员登录</h3>
+          <form id="loginForm" class="space-y-3">
+            <input type="password" id="loginPassword" class="w-full border rounded-md p-3 focus:ring focus:ring-brand-300" placeholder="请输入密码" />
+            <button class="w-full px-4 py-2 rounded-md bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:opacity-90">登录</button>
+            <div id="loginStatus" class="text-sm text-gray-500"></div>
+          </form>
+        </div>`;
+      document.body.appendChild(m);
+      document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const pwd = document.getElementById('loginPassword').value.trim();
+        const st = document.getElementById('loginStatus');
+        if (!pwd) { st.textContent = '密码不能为空'; return; }
+        st.textContent = '登录中...';
+        try {
+          const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pwd }) });
+          if (!res.ok) throw new Error('登录失败');
+          authed = true;
+          document.getElementById('loginModal').remove();
+          checkAuth();
+          loadPosts();
+        } catch {
+          st.textContent = '登录失败';
+        } finally {
+          setTimeout(() => st.textContent = '', 1500);
+        }
+      });
+    }
+
+    function showChangePasswordModal() {
+      if (document.getElementById('cpModal')) return;
+      const m = document.createElement('div');
+      m.id = 'cpModal';
+      m.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-50';
+      m.innerHTML = `
+        <div class="bg-white rounded-xl shadow p-6 w-full max-w-sm">
+          <h3 class="text-lg font-semibold mb-4">修改密码</h3>
+          <form id="cpForm" class="space-y-3">
+            <input type="password" id="oldPwd" class="w-full border rounded-md p-3" placeholder="当前密码" />
+            <input type="password" id="newPwd" class="w-full border rounded-md p-3" placeholder="新密码（至少8位）" />
+            <div class="flex items-center gap-3">
+              <button class="flex-1 px-4 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700">保存</button>
+              <button type="button" id="cpCancel" class="px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">取消</button>
+            </div>
+            <div id="cpStatus" class="text-sm text-gray-500"></div>
+          </form>
+        </div>`;
+      document.body.appendChild(m);
+      document.getElementById('cpCancel').onclick = () => m.remove();
+      document.getElementById('cpForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const oldPassword = document.getElementById('oldPwd').value.trim();
+        const newPassword = document.getElementById('newPwd').value.trim();
+        const st = document.getElementById('cpStatus');
+        if (!oldPassword || !newPassword) { st.textContent = '请填写完整'; return; }
+        st.textContent = '保存中...';
+        try {
+          const res = await fetch('/api/auth/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword, newPassword }) });
+          if (!res.ok) throw new Error('修改失败');
+          st.textContent = '已修改';
+          setTimeout(() => m.remove(), 600);
+        } catch {
+          st.textContent = '修改失败';
+        } finally {
+          setTimeout(() => st.textContent = '', 1500);
+        }
+      });
+    }
+
+    async function loadPosts() {
+      const wrap = document.getElementById('postList');
+      wrap.innerHTML = '<div class="text-gray-500">加载中...</div>';
+      const res = await fetch('/api/posts');
+      const posts = await res.json();
+      if (!Array.isArray(posts) || posts.length === 0) {
+        wrap.innerHTML = '<div class="text-gray-500">暂无文章</div>';
+        return;
+      }
+      wrap.innerHTML = posts.map(p => `
+        <div class="bg-white rounded-xl shadow border border-gray-100 p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <a href="/post.html?id=${p.id}" class="text-lg font-semibold hover:underline">${escapeHtml(p.title)}</a>
+              <div class="text-sm text-gray-500">${formatTime(p.updatedAt)}</div>
+            </div>
+            ${authed ? `<div class="flex items-center gap-2">
+              <button class="px-3 py-1 text-sm rounded-md bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:opacity-90" onclick="editPost('${p.id}')">编辑</button>
+              <button class="px-3 py-1 text-sm rounded-md bg-red-600 text-white hover:bg-red-700" onclick="deletePost('${p.id}')">删除</button>
+            </div>` : ''}
+          </div>
+          <p class="mt-3 text-gray-700 text-sm line-clamp-3">${escapeHtml(p.content)}</p>
+          <div class="mt-2 text-xs text-gray-500">评论：${(p.comments||[]).length}</div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    function formatTime(ts) {
+      try { return new Date(ts).toLocaleString(); } catch { return '' }
+    }
+
+    async function editPost(id) {
+      if (!authed) return showLoginModal();
+      const res = await fetch(`/api/posts/${id}`);
+      if (!res.ok) return alert('获取失败');
+      const p = await res.json();
+      document.getElementById('postId').value = p.id;
+      document.getElementById('title').value = p.title;
+      document.getElementById('content').value = p.content;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deletePost(id) {
+      if (!authed) return showLoginModal();
+      if (!confirm('确定删除这篇文章吗？')) return;
+      const res = await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+      if (!res.ok) return alert('删除失败');
+      await loadPosts();
+    }
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      document.getElementById('postId').value = '';
+      document.getElementById('title').value = '';
+      document.getElementById('content').value = '';
+      document.getElementById('status').textContent = '';
+    });
+
+    document.getElementById('postForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!authed) return showLoginModal();
+      const id = document.getElementById('postId').value;
+      const title = document.getElementById('title').value.trim();
+      const content = document.getElementById('content').value.trim();
+      const status = document.getElementById('status');
+      if (!title || !content) { status.textContent = '标题与内容不能为空'; return; }
+      status.textContent = '保存中...';
+      try {
+        let res;
+        if (id) {
+          res = await fetch(`/api/posts/${id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+          });
+        } else {
+          res = await fetch('/api/posts', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content })
+          });
+        }
+        if (!res.ok) throw new Error('保存失败');
+        document.getElementById('postForm').reset();
+        document.getElementById('postId').value = '';
+        status.textContent = '已保存';
+        if (!id) {
+          setTimeout(() => { window.location.replace('/'); }, 500);
+        } else {
+          await loadPosts();
+        }
+      } catch (e) {
+        status.textContent = '保存失败';
+      } finally {
+        setTimeout(() => status.textContent = '', 1500);
+      }
+    });
+
+    // Init
+    (async () => {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+      await checkAuth();
+      if (!authed) showLoginModal();
+      loadPosts();
+    })();
+  </script>
+</body>
+</html>

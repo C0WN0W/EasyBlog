@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>文章详情</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <header class="bg-gradient-to-r from-brand-600 to-purple-600 text-white">
+    <div class="max-w-5xl mx-auto px-4 py-6 flex items-center justify-between">
+      <a href="/" class="text-2xl font-semibold tracking-wide">我的博客</a>
+      <nav class="space-x-4">
+        <a href="/" class="hover:underline">首页</a>
+        <a href="/admin.html" class="hover:underline">管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-8">
+    <article id="article" class="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
+      <div class="p-6">
+        <h1 id="title" class="text-2xl font-bold mb-3"></h1>
+        <div id="meta" class="text-sm text-gray-500 mb-5"></div>
+        <div id="content" class="prose max-w-none"></div>
+      </div>
+      <div class="px-6 py-4 bg-gray-50 text-sm text-gray-600 flex justify-between">
+        <span id="times"></span>
+        <span id="count"></span>
+      </div>
+    </article>
+
+    <section class="mt-8">
+      <h2 class="text-lg font-semibold mb-3">评论</h2>
+      <div id="comments" class="space-y-4"></div>
+      <form id="commentForm" class="mt-6 bg-white rounded-xl shadow border border-gray-100 p-4">
+        <label class="block text-sm text-gray-600 mb-2">匿名评论</label>
+        <textarea id="commentContent" class="w-full border rounded-md p-3 focus:ring focus:ring-brand-300" rows="4" placeholder="说点什么吧..."></textarea>
+        <div class="mt-3 flex items-center gap-3">
+          <button type="submit" class="px-4 py-2 rounded-md bg-gradient-to-r from-brand-600 to-purple-600 text-white hover:opacity-90 transition">提交</button>
+          <span id="commentStatus" class="text-sm text-gray-500"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const postId = params.get('id');
+
+    async function loadPost() {
+      const article = document.getElementById('article');
+      article.classList.add('opacity-50');
+      try {
+        const res = await fetch(`/api/posts/${postId}`);
+        if (!res.ok) throw new Error('加载失败');
+        const p = await res.json();
+        document.getElementById('title').textContent = p.title;
+        document.getElementById('meta').textContent = `更新：${formatTime(p.updatedAt)}`;
+        document.getElementById('content').textContent = p.content;
+        document.getElementById('times').textContent = `发布：${formatTime(p.createdAt)}`;
+        document.getElementById('count').textContent = `评论：${(p.comments||[]).length}`;
+        renderComments(p.comments||[]);
+      } catch (e) {
+        document.getElementById('title').textContent = '文章不存在或加载失败';
+      } finally {
+        article.classList.remove('opacity-50');
+      }
+    }
+
+    function renderComments(list) {
+      const wrap = document.getElementById('comments');
+      if (!list.length) {
+        wrap.innerHTML = '<div class="text-gray-500">还没有评论</div>';
+        return;
+      }
+      wrap.innerHTML = list.map(c => `
+        <div class="bg-white rounded-xl shadow border border-gray-100 p-4">
+          <div class="text-sm text-gray-500 mb-1">${formatTime(c.createdAt)}</div>
+          <div>${escapeHtml(c.content)}</div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    function formatTime(ts) {
+      try { return new Date(ts).toLocaleString(); } catch { return '' }
+    }
+
+    document.getElementById('commentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const content = document.getElementById('commentContent').value.trim();
+      const status = document.getElementById('commentStatus');
+      if (!content) { status.textContent = '内容不能为空'; return; }
+      status.textContent = '提交中...';
+      try {
+        const res = await fetch(`/api/posts/${postId}/comments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content })
+        });
+        if (!res.ok) throw new Error('提交失败');
+        document.getElementById('commentContent').value = '';
+        status.textContent = '已提交';
+        await loadPost();
+      } catch (e) {
+        status.textContent = '提交失败';
+      } finally {
+        setTimeout(() => status.textContent = '', 1500);
+      }
+    });
+
+    loadPost();
+  </script>
+</body>
+</html>

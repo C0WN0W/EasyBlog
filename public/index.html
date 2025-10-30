@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的博客</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <header class="bg-gradient-to-r from-brand-600 to-purple-600 text-white">
+    <div class="max-w-5xl mx-auto px-4 py-6 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-wide">我的博客</h1>
+      <nav class="space-x-4">
+        <a href="/" class="hover:underline">首页</a>
+        <a href="/admin.html" class="hover:underline">管理</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8">
+    <section class="mb-8">
+      <h2 class="text-xl font-semibold mb-3">最新文章</h2>
+      <div id="posts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </section>
+  </main>
+
+  <footer class="max-w-5xl mx-auto px-4 pb-8 text-sm text-gray-500">
+    <p>基于纯 HTML + 文件存储的轻量博客</p>
+  </footer>
+
+  <script>
+    async function loadPosts() {
+      const container = document.getElementById('posts');
+      container.innerHTML = '<div class="text-gray-500">加载中...</div>';
+      try {
+        const res = await fetch('/api/posts');
+        const posts = await res.json();
+        if (!Array.isArray(posts) || posts.length === 0) {
+          container.innerHTML = '<div class="text-gray-500">暂无文章，去 <a class="underline" href="/admin.html">管理页</a> 发布一篇吧。</div>';
+          return;
+        }
+        container.innerHTML = posts.map(p => `
+          <a href="/post.html?id=${p.id}" class="block bg-white rounded-xl shadow hover:shadow-lg transition overflow-hidden border border-gray-100">
+            <div class="p-5">
+              <h3 class="text-lg font-semibold mb-2 line-clamp-2">${escapeHtml(p.title)}</h3>
+              <p class="text-gray-600 text-sm line-clamp-3">${escapeHtml(p.content)}</p>
+            </div>
+            <div class="px-5 py-3 bg-gray-50 text-xs text-gray-500 flex justify-between">
+              <span>发布于：${formatTime(p.createdAt)}</span>
+              <span>评论：${(p.comments||[]).length}</span>
+            </div>
+          </a>
+        `).join('');
+      } catch (e) {
+        container.innerHTML = '<div class="text-red-600">加载失败</div>';
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    function formatTime(ts) {
+      try { return new Date(ts).toLocaleString(); } catch { return '' }
+    }
+
+    loadPosts();
+  </script>
+</body>
+</html>
